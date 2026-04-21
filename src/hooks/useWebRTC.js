@@ -9,6 +9,7 @@ const useWebRTC = (roomId, userName) => {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const peersRef = useRef({});
   const socketRef = useRef(null);
+  const isJoinedRef = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -25,15 +26,24 @@ const useWebRTC = (roomId, userName) => {
         });
         setLocalStream(stream);
         
-        socketRef.current.emit('join-room', { roomId, userName });
+        if (!isJoinedRef.current) {
+          isJoinedRef.current = true;
+          socketRef.current.emit('join-room', { roomId, userName });
+        }
         
         socketRef.current.on('user-joined', (user) => {
           console.log('New user joined:', user);
-          createPeer(user.userId, user.userName, true);
+          // Don't create peer for self
+          if (user.userId !== socketRef.current.id) {
+            createPeer(user.userId, user.userName, true);
+          }
         });
         
         socketRef.current.on('receive-signal', (data) => {
           const { signal, userId, userName: remoteUserName } = data;
+          // Don't process signals from self
+          if (userId === socketRef.current.id) return;
+          
           if (peersRef.current[userId]) {
             peersRef.current[userId].signal(signal);
           } else {
@@ -50,20 +60,6 @@ const useWebRTC = (roomId, userName) => {
           }
         });
 
-        socketRef.current.on('participants-update', (participantsList) => {
-          console.log('Participants update from WebRTC:', participantsList);
-          // Update local participants with their stream status
-          setParticipants(prev => {
-            const updated = participantsList.map(p => {
-              const existing = prev.find(ep => ep.userId === p.userId);
-              return {
-                ...p,
-                stream: existing?.stream || null
-              };
-            });
-            return updated;
-          });
-        });
       } catch (error) {
         console.error('Error accessing media devices:', error);
       }
@@ -84,6 +80,12 @@ const useWebRTC = (roomId, userName) => {
 
   const createPeer = (userId, remoteUserName, initiator, signal) => {
     if (!localStream) return;
+    
+    // Don't create peer for self
+    if (userId === socketRef.current?.id) return;
+    
+    // Check if peer already exists
+    if (peersRef.current[userId]) return;
     
     const peer = new SimplePeer({
       initiator,

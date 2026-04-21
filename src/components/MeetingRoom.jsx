@@ -104,44 +104,45 @@ const MeetingRoom = () => {
 
   // Get unique video participants (excluding current user)
   const uniqueVideoParticipants = useMemo(() => {
-    // Filter out duplicates by userId
     const unique = new Map();
     remoteParticipants.forEach(p => {
-      if (p.userId && !unique.has(p.userId)) {
+      // Skip if participant name matches current user or if userId is same as socket
+      if (p.userId && !unique.has(p.userId) && p.name !== displayName && p.name !== 'You') {
         unique.set(p.userId, p);
       }
     });
     return Array.from(unique.values());
-  }, [remoteParticipants]);
+  }, [remoteParticipants, displayName]);
 
   // Get unique socket participants (excluding current user)
   const uniqueSocketParticipants = useMemo(() => {
     const unique = new Map();
     socketParticipants.forEach(p => {
-      if (p.userId && !unique.has(p.userId) && p.userId !== 'current_user') {
+      // Skip if participant name matches current user
+      if (p.userId && !unique.has(p.userId) && p.userId !== 'current_user' && p.name !== displayName) {
         unique.set(p.userId, p);
       }
     });
     return Array.from(unique.values());
-  }, [socketParticipants]);
+  }, [socketParticipants, displayName]);
 
-  // Calculate total participants (unique)
+  // Calculate total participants (unique) - only count others + self
   const totalParticipants = useMemo(() => {
     const allParticipants = new Map();
     
-    // Add current user
+    // Add current user (only if we have a display name)
     if (displayName) {
       allParticipants.set('current_user', { name: displayName, isActive: true });
     }
     
-    // Add remote participants
+    // Add remote participants (others)
     uniqueVideoParticipants.forEach(p => {
-      if (p.userId) allParticipants.set(p.userId, p);
+      if (p.userId && p.name !== displayName) allParticipants.set(p.userId, p);
     });
     
-    // Add socket participants
+    // Add socket participants (others)
     uniqueSocketParticipants.forEach(p => {
-      if (p.userId) allParticipants.set(p.userId, p);
+      if (p.userId && p.name !== displayName) allParticipants.set(p.userId, p);
     });
     
     return allParticipants.size;
@@ -162,7 +163,7 @@ const MeetingRoom = () => {
     }
     
     uniqueSocketParticipants.forEach(p => {
-      if (!allParticipants.has(p.userId)) {
+      if (!allParticipants.has(p.userId) && p.name !== displayName) {
         allParticipants.set(p.userId, {
           name: p.name,
           userId: p.userId,
@@ -175,7 +176,7 @@ const MeetingRoom = () => {
     });
     
     uniqueVideoParticipants.forEach(p => {
-      if (!allParticipants.has(p.userId)) {
+      if (!allParticipants.has(p.userId) && p.name !== displayName) {
         allParticipants.set(p.userId, {
           name: p.name,
           userId: p.userId,
@@ -274,16 +275,27 @@ const MeetingRoom = () => {
                 isVideoOn={isVideoOn}
               />
               
-              {/* Remote participants - unique only */}
-              {uniqueVideoParticipants.map((participant, index) => (
-                <VideoPlayer
-                  key={participant.userId || `remote-${index}`}
-                  stream={participant.stream}
-                  name={participant.name}
-                  isMicOn={participant.isMicOn}
-                  isVideoOn={participant.isVideoOn}
-                />
-              ))}
+              {/* Remote participants - unique only, exclude self */}
+              {uniqueVideoParticipants.length > 0 ? (
+                uniqueVideoParticipants.map((participant, index) => (
+                  <VideoPlayer
+                    key={participant.userId || `remote-${index}`}
+                    stream={participant.stream}
+                    name={participant.name}
+                    isMicOn={participant.isMicOn}
+                    isVideoOn={participant.isVideoOn}
+                  />
+                ))
+              ) : (
+                // Show waiting message when no other participants
+                <div className="video-container bg-gray-800 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Waiting for others to join...</p>
+                    <p className="text-xs mt-1">Share the meeting ID to invite participants</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
