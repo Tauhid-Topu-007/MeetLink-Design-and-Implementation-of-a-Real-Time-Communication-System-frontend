@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer base {
+  body {
+    @apply bg-gray-900 text-white;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .video-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4;
+  }
+  
+  .video-container {
+    @apply relative bg-gray-800 rounded-lg overflow-hidden aspect-video;
+  }
+  
+  .control-button {
+    @apply p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition-all duration-200;
+  }
+  
+  .chat-message {
+    @apply p-2 rounded-lg mb-2;
+  }
+  
+  .chat-message-own {
+    @apply bg-blue-600 ml-auto;
+  }
+  
+  .chat-message-other {
+    @apply bg-gray-700;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
+}
