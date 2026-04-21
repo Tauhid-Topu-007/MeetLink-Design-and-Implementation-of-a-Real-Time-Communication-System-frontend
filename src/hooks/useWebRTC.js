@@ -11,6 +11,8 @@ const useWebRTC = (roomId, userName) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    if (!roomId) return;
+
     socketRef.current = io('http://localhost:5000', {
       transports: ['websocket', 'polling']
     });
@@ -26,24 +28,41 @@ const useWebRTC = (roomId, userName) => {
         socketRef.current.emit('join-room', { roomId, userName });
         
         socketRef.current.on('user-joined', (user) => {
+          console.log('New user joined:', user);
           createPeer(user.userId, user.userName, true);
         });
         
         socketRef.current.on('receive-signal', (data) => {
-          const { signal, userId, userName } = data;
+          const { signal, userId, userName: remoteUserName } = data;
           if (peersRef.current[userId]) {
             peersRef.current[userId].signal(signal);
           } else {
-            createPeer(userId, userName, false, signal);
+            createPeer(userId, remoteUserName, false, signal);
           }
         });
 
         socketRef.current.on('user-left', ({ userId }) => {
+          console.log('User left:', userId);
           if (peersRef.current[userId]) {
             peersRef.current[userId].destroy();
             delete peersRef.current[userId];
             setParticipants(prev => prev.filter(p => p.userId !== userId));
           }
+        });
+
+        socketRef.current.on('participants-update', (participantsList) => {
+          console.log('Participants update from WebRTC:', participantsList);
+          // Update local participants with their stream status
+          setParticipants(prev => {
+            const updated = participantsList.map(p => {
+              const existing = prev.find(ep => ep.userId === p.userId);
+              return {
+                ...p,
+                stream: existing?.stream || null
+              };
+            });
+            return updated;
+          });
         });
       } catch (error) {
         console.error('Error accessing media devices:', error);
@@ -57,11 +76,15 @@ const useWebRTC = (roomId, userName) => {
         localStream.getTracks().forEach(track => track.stop());
       }
       Object.values(peersRef.current).forEach(peer => peer.destroy());
-      socketRef.current.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, [roomId, userName]);
 
-  const createPeer = (userId, userName, initiator, signal) => {
+  const createPeer = (userId, remoteUserName, initiator, signal) => {
+    if (!localStream) return;
+    
     const peer = new SimplePeer({
       initiator,
       trickle: false,
@@ -74,22 +97,33 @@ const useWebRTC = (roomId, userName) => {
       }
     });
     
-    peer.on('signal', (signal) => {
+    peer.on('signal', (signalData) => {
       socketRef.current.emit('send-signal', {
-        signal,
+        signal: signalData,
         userId,
         roomId
       });
     });
     
-    peer.on('stream', (stream) => {
-      setParticipants(prev => [...prev, { 
-        userId, 
-        name: userName, 
-        stream, 
-        isMicOn: true, 
-        isVideoOn: true 
-      }]);
+    peer.on('stream', (remoteStream) => {
+      console.log('Received stream from:', remoteUserName);
+      setParticipants(prev => {
+        // Check if participant already exists
+        const exists = prev.some(p => p.userId === userId);
+        if (exists) {
+          return prev.map(p => 
+            p.userId === userId ? { ...p, stream: remoteStream } : p
+          );
+        }
+        return [...prev, { 
+          userId, 
+          name: remoteUserName, 
+          stream: remoteStream, 
+          isMicOn: true, 
+          isVideoOn: true,
+          isCreator: false
+        }];
+      });
     });
 
     peer.on('error', (err) => {
@@ -109,7 +143,7 @@ const useWebRTC = (roomId, userName) => {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMicOn(audioTrack.enabled);
-        socketRef.current.emit('toggle-mic', { roomId, isOn: audioTrack.enabled });
+        socketRef.current?.emit('toggle-mic', { roomId, isOn: audioTrack.enabled });
       }
     }
   };
@@ -120,7 +154,7 @@ const useWebRTC = (roomId, userName) => {
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoOn(videoTrack.enabled);
-        socketRef.current.emit('toggle-video', { roomId, isOn: videoTrack.enabled });
+        socketRef.current?.emit('toggle-video', { roomId, isOn: videoTrack.enabled });
       }
     }
   };
@@ -154,8 +188,11 @@ const useWebRTC = (roomId, userName) => {
           });
         }
       };
+      
+      toast?.success('Screen sharing started');
     } catch (error) {
       console.error('Error sharing screen:', error);
+      toast?.error('Failed to share screen');
     }
   };
 

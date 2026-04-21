@@ -8,9 +8,11 @@ import Chat from './Chat';
 import Whiteboard from './Whiteboard';
 import ParticipantsList from './ParticipantsList';
 import AttendanceExport from './AttendanceExport';
+import RecordingControls from './RecordingControls';
+import useRecording from '../hooks/useRecording';
 import useWebRTC from '../hooks/useWebRTC';
 import useSocket from '../hooks/useSocket';
-import { X, FileSpreadsheet } from 'lucide-react';
+import { X, FileSpreadsheet, Users, Copy, Check } from 'lucide-react';
 
 const MeetingRoom = () => {
   const { meetingId } = useParams();
@@ -21,6 +23,7 @@ const MeetingRoom = () => {
   const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [showAttendance, setShowAttendance] = useState(false);
   const [isAutoPresenting, setIsAutoPresenting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { isCreator, displayName, password, meetingName } = location.state || {};
   
   const {
@@ -30,17 +33,25 @@ const MeetingRoom = () => {
     isVideoOn,
     toggleMic,
     toggleVideo,
-    shareScreen,
-    stopScreenShare
+    shareScreen
   } = useWebRTC(meetingId, displayName || 'Guest');
 
   const { sendMessage, sendFile, messages, participants: socketParticipants } = useSocket(meetingId, displayName);
+  
+  const {
+    isRecording,
+    recordedVideo,
+    startRecording,
+    stopRecording,
+    saveRecording,
+    clearRecording
+  } = useRecording();
 
-  // Auto-present for ALL users when they join (not just creator)
+  // Auto-present for ALL users when they join
   useEffect(() => {
     const timer = setTimeout(() => {
       handleAutoPresent();
-    }, 3000); // Auto-present after 3 seconds
+    }, 3000);
     
     return () => clearTimeout(timer);
   }, []);
@@ -52,6 +63,9 @@ const MeetingRoom = () => {
   };
 
   const handleEndCall = () => {
+    if (isRecording) {
+      stopRecording();
+    }
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
@@ -59,8 +73,27 @@ const MeetingRoom = () => {
     toast.success('Meeting ended');
   };
 
-  const handleSendFile = async (fileData) => {
-    await sendFile(fileData);
+  const handleStartRecording = () => {
+    if (localStream) {
+      startRecording(localStream);
+    } else {
+      toast.error('No stream available to record');
+    }
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+  };
+
+  const handleSaveRecording = () => {
+    saveRecording(meetingId, meetingName);
+  };
+
+  const copyMeetingId = () => {
+    navigator.clipboard.writeText(meetingId);
+    setCopied(true);
+    toast.success('Meeting ID copied to clipboard!');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   // Prepare attendance data
@@ -74,7 +107,6 @@ const MeetingRoom = () => {
     email: p.email
   }));
 
-  // Add current user to attendance if not already there
   if (displayName && !attendanceParticipants.some(p => p.name === displayName)) {
     attendanceParticipants.push({
       name: displayName,
@@ -84,15 +116,54 @@ const MeetingRoom = () => {
     });
   }
 
+  const activeParticipantCount = socketParticipants.filter(p => p.isActive !== false).length;
+
   return (
     <div className="h-screen flex flex-col bg-gray-900">
       {/* Meeting Info Bar */}
-      <div className="bg-gray-800 px-4 py-2 text-center border-b border-gray-700 flex justify-between items-center">
-        <div className="w-20"></div>
-        <span className="text-sm text-gray-300">
-          Meeting ID: <span className="font-mono font-bold">{meetingId}</span>
-          {meetingName && ` • ${meetingName}`}
-        </span>
+      <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <RecordingControls
+            isRecording={isRecording}
+            recordedVideo={recordedVideo}
+            onStartRecording={handleStartRecording}
+            onStopRecording={handleStopRecording}
+            onSaveRecording={handleSaveRecording}
+            onClearRecording={clearRecording}
+            meetingId={meetingId}
+            meetingName={meetingName}
+          />
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-1">
+            <Users className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-medium">
+              {activeParticipantCount} participant{activeParticipantCount !== 1 ? 's' : ''}
+            </span>
+            <span className="text-xs text-gray-400">(Unlimited)</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-300">
+              Meeting ID: <span className="font-mono font-bold">{meetingId}</span>
+            </span>
+            <button
+              onClick={copyMeetingId}
+              className="p-1 hover:bg-gray-700 rounded transition"
+              title="Copy Meeting ID"
+            >
+              {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+          
+          {meetingName && (
+            <span className="text-sm text-gray-300">
+              • {meetingName}
+            </span>
+          )}
+        </div>
+        
         <button
           onClick={() => setShowAttendance(!showAttendance)}
           className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded-lg flex items-center gap-2 text-sm transition"
@@ -104,24 +175,33 @@ const MeetingRoom = () => {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className="video-grid">
-            <VideoPlayer
-              stream={localStream}
-              isLocal={true}
-              name={displayName || 'You'}
-              isMicOn={isMicOn}
-              isVideoOn={isVideoOn}
-            />
-            {participants.map((participant, index) => (
+          {participants.length === 0 && !localStream ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-400">Connecting to meeting...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="video-grid">
               <VideoPlayer
-                key={index}
-                stream={participant.stream}
-                name={participant.name}
-                isMicOn={participant.isMicOn}
-                isVideoOn={participant.isVideoOn}
+                stream={localStream}
+                isLocal={true}
+                name={displayName || 'You'}
+                isMicOn={isMicOn}
+                isVideoOn={isVideoOn}
               />
-            ))}
-          </div>
+              {participants.map((participant, index) => (
+                <VideoPlayer
+                  key={index}
+                  stream={participant.stream}
+                  name={participant.name}
+                  isMicOn={participant.isMicOn}
+                  isVideoOn={participant.isVideoOn}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <AnimatePresence>
@@ -141,7 +221,7 @@ const MeetingRoom = () => {
               <Chat 
                 messages={messages} 
                 onSendMessage={sendMessage}
-                onSendFile={handleSendFile}
+                onSendFile={sendFile}
                 roomId={meetingId}
                 currentUser={displayName}
               />

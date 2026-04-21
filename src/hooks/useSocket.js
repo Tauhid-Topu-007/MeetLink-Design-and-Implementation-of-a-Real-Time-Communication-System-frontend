@@ -8,15 +8,30 @@ const useSocket = (roomId, userName) => {
   const messageIdRef = useRef(0);
 
   useEffect(() => {
+    if (!roomId || !userName) return;
+
     socketRef.current = io('http://localhost:5000', {
       transports: ['websocket', 'polling']
     });
     
     socketRef.current.emit('join-room', { roomId, userName });
     
+    // Listen for participants update
+    socketRef.current.on('participants-update', (participantsList) => {
+      console.log('Participants update received:', participantsList);
+      setParticipants(participantsList || []);
+    });
+    
+    // Listen for room joined event
+    socketRef.current.on('room-joined', (data) => {
+      console.log('Room joined:', data);
+      if (data.participants) {
+        setParticipants(data.participants);
+      }
+    });
+    
     // Handle incoming chat messages
     socketRef.current.on('chat-message', (message) => {
-      // Prevent duplicate messages by checking ID
       setMessages(prev => {
         const exists = prev.some(m => m.id === message.id);
         if (exists) return prev;
@@ -33,19 +48,28 @@ const useSocket = (roomId, userName) => {
       });
     });
     
-    socketRef.current.on('participants-update', (participantsList) => {
-      setParticipants(participantsList);
+    // Handle user joined
+    socketRef.current.on('user-joined', (user) => {
+      console.log('User joined:', user);
+      toast?.success(`${user.userName} joined the meeting`);
+    });
+    
+    // Handle user left
+    socketRef.current.on('user-left', (user) => {
+      console.log('User left:', user);
+      toast?.success(`A participant left the meeting`);
     });
     
     return () => {
       if (socketRef.current) {
+        socketRef.current.emit('leave-room', { roomId });
         socketRef.current.disconnect();
       }
     };
   }, [roomId, userName]);
 
   const sendMessage = useCallback((text) => {
-    if (!text.trim()) return;
+    if (!text.trim() || !socketRef.current) return;
     
     const message = {
       id: `${Date.now()}_${messageIdRef.current++}`,
@@ -61,6 +85,8 @@ const useSocket = (roomId, userName) => {
   }, [userName, roomId]);
 
   const sendFile = useCallback(async (fileData) => {
+    if (!socketRef.current) return;
+    
     const fileMessage = {
       id: `${Date.now()}_${messageIdRef.current++}`,
       sender: userName,

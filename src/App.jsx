@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { Home as HomeIcon, Calendar, Users, Video, LayoutDashboard, LogOut } from 'lucide-react';
+import { Home as HomeIcon, Calendar, Users, Video, LayoutDashboard, LogOut, FolderOpen } from 'lucide-react';
 import Home from './pages/Home';
 import JoinMeeting from './pages/JoinMeeting';
 import CreateMeeting from './pages/CreateMeeting';
@@ -11,6 +11,7 @@ import Scheduler from './pages/Scheduler';
 import Contacts from './pages/Contacts';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
+import Recordings from './pages/Recordings';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -79,6 +80,7 @@ function App() {
                 <NavLink to="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} text="Dashboard" />
                 <NavLink to="/scheduler" icon={<Calendar className="w-4 h-4" />} text="Schedule" />
                 <NavLink to="/contacts" icon={<Users className="w-4 h-4" />} text="Contacts" />
+                <NavLink to="/recordings" icon={<FolderOpen className="w-4 h-4" />} text="Recordings" />
                 <div className="flex items-center gap-3 ml-4">
                   <div className="text-right">
                     <div className="text-sm font-medium">{user?.displayName || user?.username}</div>
@@ -106,6 +108,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/scheduler" element={<Scheduler />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/recordings" element={<Recordings />} />
           <Route path="/login" element={<Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

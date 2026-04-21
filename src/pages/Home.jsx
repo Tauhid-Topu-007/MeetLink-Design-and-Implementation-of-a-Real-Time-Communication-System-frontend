@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Video, Users, Calendar, Phone, Monitor, MessageSquare } from 'lucide-react';
+import { Video, Users, Calendar, Phone, Monitor, MessageSquare, FolderOpen, VideoIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Home = () => {
@@ -49,11 +49,43 @@ const Home = () => {
               <Calendar className="w-5 h-5" />
               Schedule
             </button>
+            <button
+              onClick={() => navigate('/recordings')}
+              className="px-8 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition transform hover:scale-105 flex items-center gap-2"
+            >
+              <FolderOpen className="w-5 h-5" />
+              My Recordings
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Stats Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="grid md:grid-cols-4 gap-4 max-w-4xl mx-auto mb-16"
+        >
+          <div className="bg-gray-800/50 rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-blue-500">HD</div>
+            <div className="text-sm text-gray-400">Video Quality</div>
+          </div>
+          <div className="bg-gray-800/50 rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-green-500">100</div>
+            <div className="text-sm text-gray-400">Max Participants</div>
+          </div>
+          <div className="bg-gray-800/50 rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-purple-500">24/7</div>
+            <div className="text-sm text-gray-400">Availability</div>
+          </div>
+          <div className="bg-gray-800/50 rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-orange-500">Encrypted</div>
+            <div className="text-sm text-gray-400">Security</div>
           </div>
         </motion.div>
 
         {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mt-20">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
           <FeatureCard
             icon={<Video className="w-8 h-8 text-blue-500" />}
             title="HD Video"
@@ -70,11 +102,37 @@ const Home = () => {
             description="Real-time messaging during meetings"
           />
           <FeatureCard
-            icon={<Calendar className="w-8 h-8 text-orange-500" />}
+            icon={<VideoIcon className="w-8 h-8 text-orange-500" />}
             title="Record Meetings"
             description="Record and save your important meetings"
           />
         </div>
+
+        {/* Recent Activity Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-16 max-w-4xl mx-auto"
+        >
+          <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
+            <h2 className="text-2xl font-semibold mb-4 text-center">Quick Tips</h2>
+            <div className="grid md:grid-cols-3 gap-4 text-sm text-gray-300">
+              <div className="text-center p-3">
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-2">1</div>
+                <p>Click "New Meeting" to start an instant meeting</p>
+              </div>
+              <div className="text-center p-3">
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-2">2</div>
+                <p>Share the 9-digit Meeting ID with participants</p>
+              </div>
+              <div className="text-center p-3">
+                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-2">3</div>
+                <p>Use "Schedule" to plan future meetings</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -83,7 +141,7 @@ const Home = () => {
 const FeatureCard = ({ icon, title, description }) => (
   <motion.div
     whileHover={{ scale: 1.05 }}
-    className="bg-gray-800/50 backdrop-blur-lg rounded-xl p-6 text-center border border-gray-700"
+    className="bg-gray-800/50 backdrop-blur-lg rounded-xl p-6 text-center border border-gray-700 hover:border-blue-500/50 transition-all duration-300"
   >
     <div className="flex justify-center mb-4">{icon}</div>
     <h3 className="text-xl font-semibold mb-2">{title}</h3>
