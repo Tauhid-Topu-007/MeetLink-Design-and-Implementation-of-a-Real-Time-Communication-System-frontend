@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -12,7 +12,7 @@ import RecordingControls from './RecordingControls';
 import useRecording from '../hooks/useRecording';
 import useWebRTC from '../hooks/useWebRTC';
 import useSocket from '../hooks/useSocket';
-import { X, FileSpreadsheet, Users, Copy, Check } from 'lucide-react';
+import { X, FileSpreadsheet, Users, Copy, Check, Video as VideoIcon } from 'lucide-react';
 
 const MeetingRoom = () => {
   const { meetingId } = useParams();
@@ -24,11 +24,12 @@ const MeetingRoom = () => {
   const [showAttendance, setShowAttendance] = useState(false);
   const [isAutoPresenting, setIsAutoPresenting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
   const { isCreator, displayName, password, meetingName } = location.state || {};
   
   const {
     localStream,
-    participants,
+    participants: remoteParticipants,
     isMicOn,
     isVideoOn,
     toggleMic,
@@ -40,6 +41,7 @@ const MeetingRoom = () => {
   
   const {
     isRecording,
+    isConverting,
     recordedVideo,
     startRecording,
     stopRecording,
@@ -50,16 +52,20 @@ const MeetingRoom = () => {
   // Auto-present for ALL users when they join
   useEffect(() => {
     const timer = setTimeout(() => {
-      handleAutoPresent();
+      if (localStream) {
+        setIsConnecting(false);
+        handleAutoPresent();
+      }
     }, 3000);
     
     return () => clearTimeout(timer);
-  }, []);
+  }, [localStream]);
 
   const handleAutoPresent = async () => {
     setIsAutoPresenting(true);
     toast.success('Auto-presenting your screen...');
     await shareScreen();
+    setTimeout(() => setIsAutoPresenting(false), 5000);
   };
 
   const handleEndCall = () => {
@@ -96,27 +102,92 @@ const MeetingRoom = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Prepare attendance data
-  const attendanceParticipants = participants.map(p => ({
-    name: p.name,
-    userId: p.userId,
-    joinedAt: p.joinedAt || new Date(),
-    leftAt: p.leftAt,
-    duration: p.duration,
-    isActive: p.isActive !== false,
-    email: p.email
-  }));
-
-  if (displayName && !attendanceParticipants.some(p => p.name === displayName)) {
-    attendanceParticipants.push({
-      name: displayName,
-      userId: 'current_user',
-      joinedAt: new Date(),
-      isActive: true
+  // Get unique video participants (excluding current user)
+  const uniqueVideoParticipants = useMemo(() => {
+    // Filter out duplicates by userId
+    const unique = new Map();
+    remoteParticipants.forEach(p => {
+      if (p.userId && !unique.has(p.userId)) {
+        unique.set(p.userId, p);
+      }
     });
-  }
+    return Array.from(unique.values());
+  }, [remoteParticipants]);
 
-  const activeParticipantCount = socketParticipants.filter(p => p.isActive !== false).length;
+  // Get unique socket participants (excluding current user)
+  const uniqueSocketParticipants = useMemo(() => {
+    const unique = new Map();
+    socketParticipants.forEach(p => {
+      if (p.userId && !unique.has(p.userId) && p.userId !== 'current_user') {
+        unique.set(p.userId, p);
+      }
+    });
+    return Array.from(unique.values());
+  }, [socketParticipants]);
+
+  // Calculate total participants (unique)
+  const totalParticipants = useMemo(() => {
+    const allParticipants = new Map();
+    
+    // Add current user
+    if (displayName) {
+      allParticipants.set('current_user', { name: displayName, isActive: true });
+    }
+    
+    // Add remote participants
+    uniqueVideoParticipants.forEach(p => {
+      if (p.userId) allParticipants.set(p.userId, p);
+    });
+    
+    // Add socket participants
+    uniqueSocketParticipants.forEach(p => {
+      if (p.userId) allParticipants.set(p.userId, p);
+    });
+    
+    return allParticipants.size;
+  }, [displayName, uniqueVideoParticipants, uniqueSocketParticipants]);
+
+  // Get participants for attendance (unique)
+  const attendanceParticipants = useMemo(() => {
+    const allParticipants = new Map();
+    
+    if (displayName) {
+      allParticipants.set('current_user', {
+        name: displayName,
+        userId: 'current_user',
+        joinedAt: new Date(),
+        isActive: true,
+        duration: 0
+      });
+    }
+    
+    uniqueSocketParticipants.forEach(p => {
+      if (!allParticipants.has(p.userId)) {
+        allParticipants.set(p.userId, {
+          name: p.name,
+          userId: p.userId,
+          joinedAt: p.joinedAt || new Date(),
+          isActive: p.isActive !== false,
+          duration: 0,
+          email: p.email
+        });
+      }
+    });
+    
+    uniqueVideoParticipants.forEach(p => {
+      if (!allParticipants.has(p.userId)) {
+        allParticipants.set(p.userId, {
+          name: p.name,
+          userId: p.userId,
+          joinedAt: new Date(),
+          isActive: true,
+          duration: 0
+        });
+      }
+    });
+    
+    return Array.from(allParticipants.values());
+  }, [displayName, uniqueSocketParticipants, uniqueVideoParticipants]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-900">
@@ -125,6 +196,7 @@ const MeetingRoom = () => {
         <div className="flex items-center gap-4">
           <RecordingControls
             isRecording={isRecording}
+            isConverting={isConverting}
             recordedVideo={recordedVideo}
             onStartRecording={handleStartRecording}
             onStopRecording={handleStopRecording}
@@ -139,7 +211,7 @@ const MeetingRoom = () => {
           <div className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-1">
             <Users className="w-4 h-4 text-blue-400" />
             <span className="text-sm font-medium">
-              {activeParticipantCount} participant{activeParticipantCount !== 1 ? 's' : ''}
+              {totalParticipants} participant{totalParticipants !== 1 ? 's' : ''}
             </span>
             <span className="text-xs text-gray-400">(Unlimited)</span>
           </div>
@@ -173,17 +245,27 @@ const MeetingRoom = () => {
         </button>
       </div>
 
+      {/* Auto-presenting Indicator */}
+      {isAutoPresenting && (
+        <div className="bg-blue-600 text-white text-center py-1 text-sm">
+          <VideoIcon className="w-4 h-4 inline mr-2 animate-pulse" />
+          Auto-presenting your screen...
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          {participants.length === 0 && !localStream ? (
+          {isConnecting ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                 <p className="text-gray-400">Connecting to meeting...</p>
+                <p className="text-xs text-gray-500 mt-2">Meeting ID: {meetingId}</p>
               </div>
             </div>
           ) : (
             <div className="video-grid">
+              {/* Local video - always show */}
               <VideoPlayer
                 stream={localStream}
                 isLocal={true}
@@ -191,9 +273,11 @@ const MeetingRoom = () => {
                 isMicOn={isMicOn}
                 isVideoOn={isVideoOn}
               />
-              {participants.map((participant, index) => (
+              
+              {/* Remote participants - unique only */}
+              {uniqueVideoParticipants.map((participant, index) => (
                 <VideoPlayer
-                  key={index}
+                  key={participant.userId || `remote-${index}`}
                   stream={participant.stream}
                   name={participant.name}
                   isMicOn={participant.isMicOn}
@@ -235,7 +319,7 @@ const MeetingRoom = () => {
               exit={{ x: 400 }}
               className="w-80 bg-gray-800 border-l border-gray-700 flex flex-col"
             >
-              <ParticipantsList participants={socketParticipants} />
+              <ParticipantsList participants={uniqueSocketParticipants} />
             </motion.div>
           )}
 

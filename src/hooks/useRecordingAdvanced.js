@@ -1,50 +1,47 @@
+// client/src/hooks/useRecordingAdvanced.js
 import { useState, useRef, useCallback } from 'react';
 import RecordRTC from 'recordrtc';
 import toast from 'react-hot-toast';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 
-const useRecording = () => {
+const useRecordingAdvanced = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [recordedVideo, setRecordedVideo] = useState(null);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
+  const ffmpegRef = useRef(null);
+
+  // Initialize FFmpeg
+  const initFFmpeg = async () => {
+    if (!ffmpegRef.current) {
+      const ffmpeg = new FFmpeg();
+      await ffmpeg.load();
+      ffmpegRef.current = ffmpeg;
+    }
+    return ffmpegRef.current;
+  };
 
   const startRecording = useCallback(async (stream) => {
     try {
-      // Stop any existing recording
       if (recorderRef.current && isRecording) {
         stopRecording();
       }
 
-      // Create a new stream with both audio and video
       const combinedStream = new MediaStream();
-      
-      // Add video tracks
-      stream.getVideoTracks().forEach(track => {
-        combinedStream.addTrack(track);
-      });
-      
-      // Add audio tracks
-      stream.getAudioTracks().forEach(track => {
-        combinedStream.addTrack(track);
-      });
-
+      stream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+      stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
       streamRef.current = combinedStream;
 
-      // Initialize recorder for MP4 format using MediaRecorder API
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4') 
-        ? 'video/mp4' 
-        : MediaRecorder.isTypeSupported('video/webm')
-        ? 'video/webm'
-        : 'video/mp4';
-
+      // Record in webm format first (better performance)
       const recorder = new RecordRTC(combinedStream, {
         type: 'video',
-        mimeType: mimeType,
+        mimeType: 'video/webm',
         recorderType: RecordRTC.MediaStreamRecorder,
-        bitsPerSecond: 1280000, // 1.28 Mbps for good quality
+        bitsPerSecond: 1280000,
         timeSlice: 1000,
-        ondataavailable: () => {},
+        ondataavailable: (blob) => {},
         video: {
           width: 1280,
           height: 720,
@@ -55,7 +52,6 @@ const useRecording = () => {
       recorder.startRecording();
       recorderRef.current = recorder;
       setIsRecording(true);
-      setRecordedVideo(null);
       
       toast.success('Recording started!');
     } catch (error) {
@@ -64,31 +60,64 @@ const useRecording = () => {
     }
   }, [isRecording]);
 
-  const stopRecording = useCallback(() => {
+  const convertToMP4 = async (webmBlob) => {
+    try {
+      setIsConverting(true);
+      const ffmpeg = await initFFmpeg();
+      
+      // Write webm file to FFmpeg
+      const inputFileName = 'input.webm';
+      const outputFileName = 'output.mp4';
+      
+      await ffmpeg.writeFile(inputFileName, await fetchFile(webmBlob));
+      
+      // Convert to MP4
+      await ffmpeg.exec([
+        '-i', inputFileName,
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-movflags', '+faststart',
+        '-preset', 'medium',
+        '-crf', '23',
+        outputFileName
+      ]);
+      
+      // Read the converted file
+      const data = await ffmpeg.readFile(outputFileName);
+      const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+      const url = URL.createObjectURL(mp4Blob);
+      
+      setIsConverting(false);
+      return { blob: mp4Blob, url };
+    } catch (error) {
+      console.error('Error converting to MP4:', error);
+      setIsConverting(false);
+      // Fallback to webm if conversion fails
+      const url = URL.createObjectURL(webmBlob);
+      return { blob: webmBlob, url };
+    }
+  };
+
+  const stopRecording = useCallback(async () => {
     return new Promise((resolve) => {
       if (recorderRef.current && isRecording) {
-        setIsConverting(true);
-        
-        recorderRef.current.stopRecording(() => {
-          const blob = recorderRef.current.getBlob();
-          const url = URL.createObjectURL(blob);
+        recorderRef.current.stopRecording(async () => {
+          const webmBlob = recorderRef.current.getBlob();
           
-          // Determine file extension based on blob type
-          const fileExtension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+          // Convert to MP4
+          const mp4Result = await convertToMP4(webmBlob);
           
           setRecordedVideo({
-            url,
-            blob,
+            url: mp4Result.url,
+            blob: mp4Result.blob,
             timestamp: new Date().toISOString(),
-            size: blob.size,
-            type: blob.type,
-            extension: fileExtension
+            size: mp4Result.blob.size,
+            type: 'video/mp4'
           });
           
           setIsRecording(false);
-          setIsConverting(false);
-          toast.success(`Recording stopped! Saved as ${fileExtension.toUpperCase()}`);
-          resolve({ url, blob });
+          toast.success('Recording stopped and converted to MP4!');
+          resolve(mp4Result);
         });
       } else {
         resolve(null);
@@ -102,12 +131,10 @@ const useRecording = () => {
       return null;
     }
 
-    // Generate filename with meeting info and timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const extension = recordedVideo.extension || 'mp4';
-    const fileName = `meeting_recording_${meetingName || meetingId}_${timestamp}.${extension}`;
+    const fileName = `meeting_${meetingName || meetingId}_${timestamp}.mp4`;
     
-    // Create download link for file
+    // Create download link for MP4 file
     const downloadLink = document.createElement('a');
     downloadLink.href = recordedVideo.url;
     downloadLink.download = fileName;
@@ -115,7 +142,7 @@ const useRecording = () => {
     downloadLink.click();
     document.body.removeChild(downloadLink);
     
-    // Save to localStorage with metadata
+    // Save to localStorage
     const savedRecordings = JSON.parse(localStorage.getItem('meetingRecordings') || '[]');
     const newRecording = {
       id: Date.now(),
@@ -125,13 +152,13 @@ const useRecording = () => {
       timestamp: recordedVideo.timestamp,
       size: recordedVideo.size,
       url: recordedVideo.url,
-      format: extension.toUpperCase()
+      format: 'mp4'
     };
     
     savedRecordings.unshift(newRecording);
     localStorage.setItem('meetingRecordings', JSON.stringify(savedRecordings));
     
-    toast.success(`Recording saved as ${fileName}`);
+    toast.success(`Recording saved: ${fileName}`);
     return newRecording;
   }, [recordedVideo]);
 
@@ -153,4 +180,4 @@ const useRecording = () => {
   };
 };
 
-export default useRecording;
+export default useRecordingAdvanced;
