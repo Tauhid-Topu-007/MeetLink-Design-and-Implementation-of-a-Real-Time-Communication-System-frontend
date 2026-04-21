@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import axios from 'axios';
-import { Copy, Check } from 'lucide-react';
 
 const JoinMeeting = () => {
   const navigate = useNavigate();
@@ -11,26 +10,6 @@ const JoinMeeting = () => {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  // Generate a random meeting ID for demo purposes
-  const generateRandomMeetingId = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 9; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setMeetingId(result);
-  };
-
-  const copyToClipboard = () => {
-    if (meetingId) {
-      navigator.clipboard.writeText(meetingId);
-      setCopied(true);
-      toast.success('Meeting ID copied to clipboard!');
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
   const handleJoinMeeting = async () => {
     if (!meetingId.trim()) {
@@ -39,6 +18,13 @@ const JoinMeeting = () => {
     }
     if (!displayName.trim()) {
       toast.error('Please enter your name');
+      return;
+    }
+
+    // Validate meeting ID format
+    const meetingIdRegex = /^[A-Z0-9]{6,12}$/i;
+    if (!meetingIdRegex.test(meetingId.trim())) {
+      toast.error('Invalid meeting ID format. Must be 6-12 alphanumeric characters');
       return;
     }
 
@@ -52,17 +38,23 @@ const JoinMeeting = () => {
       
       if (response.data.success) {
         toast.success('Joined meeting successfully!');
-        navigate(`/meeting/${meetingId}`, { 
+        navigate(`/meeting/${meetingId.trim().toUpperCase()}`, { 
           state: { 
             isCreator: false, 
             displayName, 
             password,
-            meetingName: response.data.data.meetingName 
+            meetingName: response.data.data?.meetingName || 'Meeting'
           } 
         });
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to join meeting');
+      if (error.response?.status === 404) {
+        toast.error('Meeting not found. Please check the meeting ID.');
+      } else if (error.response?.status === 401) {
+        toast.error('Invalid password. Please try again.');
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to join meeting');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -80,39 +72,18 @@ const JoinMeeting = () => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">Meeting ID</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={meetingId}
-                onChange={(e) => setMeetingId(e.target.value.toUpperCase())}
-                className="flex-1 px-4 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                placeholder="Enter 9-digit meeting ID (e.g., ABC123XYZ)"
-              />
-              <button
-                onClick={generateRandomMeetingId}
-                className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition text-sm"
-                title="Generate random meeting ID"
-              >
-                Random
-              </button>
-            </div>
+            <input
+              type="text"
+              value={meetingId}
+              onChange={(e) => setMeetingId(e.target.value.toUpperCase())}
+              className="w-full px-4 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+              placeholder="Enter meeting ID (e.g., ABC123XYZ)"
+              maxLength="12"
+            />
             <p className="text-xs text-gray-400 mt-1">
-              Example: ABC123XYZ (9 characters)
+              Enter the 6-12 character meeting ID provided by the host
             </p>
           </div>
-          
-          {meetingId && (
-            <div className="flex items-center gap-2 p-2 bg-gray-700 rounded-lg">
-              <code className="flex-1 text-center font-mono text-lg">{meetingId}</code>
-              <button
-                onClick={copyToClipboard}
-                className="p-1 hover:bg-gray-600 rounded transition"
-                title="Copy meeting ID"
-              >
-                {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          )}
           
           <div>
             <label className="block text-sm font-medium mb-2">Your Name</label>
@@ -132,7 +103,7 @@ const JoinMeeting = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Meeting password (optional)"
+              placeholder="Meeting password"
             />
           </div>
           
