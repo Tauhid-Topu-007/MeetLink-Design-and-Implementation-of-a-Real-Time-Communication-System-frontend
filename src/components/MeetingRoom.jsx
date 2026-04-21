@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -19,7 +19,7 @@ const MeetingRoom = () => {
   const [showParticipants, setShowParticipants] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [isAutoPresenting, setIsAutoPresenting] = useState(false);
-  const { isCreator, displayName, password } = location.state || {};
+  const { isCreator, displayName, password, meetingName } = location.state || {};
   
   const {
     localStream,
@@ -32,7 +32,7 @@ const MeetingRoom = () => {
     stopScreenShare
   } = useWebRTC(meetingId, displayName || 'Guest');
 
-  const { sendMessage, messages, participants: socketParticipants } = useSocket(meetingId, displayName);
+  const { sendMessage, sendFile, messages, participants: socketParticipants } = useSocket(meetingId, displayName);
 
   useEffect(() => {
     if (isCreator && !isAutoPresenting) {
@@ -57,8 +57,20 @@ const MeetingRoom = () => {
     toast.success('Meeting ended');
   };
 
+  const handleSendFile = async (fileData) => {
+    await sendFile(fileData);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-900">
+      {/* Meeting Info Bar */}
+      <div className="bg-gray-800 px-4 py-2 text-center border-b border-gray-700">
+        <span className="text-sm text-gray-300">
+          Meeting ID: <span className="font-mono font-bold">{meetingId}</span>
+          {meetingName && ` • ${meetingName}`}
+        </span>
+      </div>
+
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           <div className="video-grid">
@@ -95,7 +107,13 @@ const MeetingRoom = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <Chat messages={messages} onSendMessage={sendMessage} />
+              <Chat 
+                messages={messages} 
+                onSendMessage={sendMessage}
+                onSendFile={handleSendFile}
+                roomId={meetingId}
+                currentUser={displayName}
+              />
             </motion.div>
           )}
 
