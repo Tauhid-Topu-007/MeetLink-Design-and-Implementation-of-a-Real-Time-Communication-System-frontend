@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, PhoneOff, 
-  Monitor, MessageSquare, Users, PenTool
+  Monitor, MonitorStop, MessageSquare, Users, PenTool
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -15,15 +15,16 @@ const Controls = ({
   onToggleChat,
   onToggleParticipants,
   onToggleWhiteboard,
+  isScreenSharing,
   isAutoPresenting
 }) => {
   return (
     <motion.div
       initial={{ y: 100 }}
       animate={{ y: 0 }}
-      className="bg-gray-800 border-t border-gray-700 py-4 px-6"
+      className="bg-gray-800/95 backdrop-blur-lg border-t border-gray-700 py-4 px-6 z-10 relative shadow-lg"
     >
-      <div className="flex items-center justify-center gap-4 flex-wrap">
+      <div className="flex items-center justify-center gap-3 flex-wrap">
         <ControlButton
           icon={isMicOn ? Mic : MicOff}
           label="Mute"
@@ -41,9 +42,10 @@ const Controls = ({
         />
         
         <ControlButton
-          icon={Monitor}
-          label="Share Screen"
+          icon={isScreenSharing ? MonitorStop : Monitor}
+          label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
           onClick={onShareScreen}
+          active={!isScreenSharing}
           color="green"
         />
         
@@ -70,15 +72,15 @@ const Controls = ({
         
         <button
           onClick={onEndCall}
-          className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-all duration-200"
+          className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-all duration-200 transform hover:scale-105 shadow-lg"
         >
           <PhoneOff className="w-6 h-6" />
         </button>
       </div>
       
       {isAutoPresenting && (
-        <div className="text-center mt-2 text-sm text-green-500 animate-pulse">
-          📺 Auto-presenting screen...
+        <div className="text-center mt-3 text-sm text-green-500 animate-pulse">
+          🎥 Auto-presenting screen in 3 seconds...
         </div>
       )}
     </motion.div>
@@ -96,10 +98,10 @@ const ControlButton = ({ icon: Icon, label, onClick, active, color }) => {
   return (
     <button
       onClick={onClick}
-      className={`p-3 rounded-full transition-all duration-200 ${colors[color]} ${!active && color === 'blue' ? 'bg-gray-600' : ''}`}
+      className={`p-3 rounded-full transition-all duration-200 transform hover:scale-105 shadow-md ${colors[color]} ${!active && color === 'blue' ? 'bg-gray-600 hover:bg-gray-700' : ''}`}
       title={label}
     >
-      <Icon className="w-6 h-6" />
+      <Icon className="w-5 h-5" />
     </button>
   );
 };
